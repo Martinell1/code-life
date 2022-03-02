@@ -87,3 +87,17 @@ function reverseList(head){
 
   return pre
 }
+
+//判断是否是循环链表
+function hasCycle(head){
+  let cur = head
+  while(cur.next){
+    if(cur.flag){
+      return true
+    }
+
+    cur.flag = true
+    cur = cur.next
+  }
+  return false
+}
