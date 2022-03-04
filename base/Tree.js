@@ -33,7 +33,7 @@ function preorder(root){
   preorder(root.right)
 }
 
-preorder(root)
+// preorder(root)
 console.log('中序遍历');
 function inorder(root){
 
@@ -46,7 +46,7 @@ function inorder(root){
   inorder(root.right)
 }
 
-inorder(root)
+// inorder(root)
 
 console.log('后序遍历');
 function postorder(root){
@@ -59,4 +59,29 @@ function postorder(root){
   console.log(root.val);
 }
 
-postorder(root)
+// postorder(root)
+
+const preorderTraversal = function(root){
+  const res = []
+  if(!root){
+    return res
+  }
+
+  const stack = []
+  stack.push(root)
+  while(stack.length){
+    const cur = stack.pop()
+    res.push(cur.val)
+    if(cur.right){
+      stack.push(cur.right)
+    }
+    if(cur.left){
+      stack.push(cur.left)
+    }
+  }
+
+  return res
+}
+
+console.log('递归');
+console.log(preorderTraversal(root));
