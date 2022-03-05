@@ -83,5 +83,67 @@ const preorderTraversal = function(root){
   return res
 }
 
-console.log('递归');
-console.log(preorderTraversal(root));
+// console.log(preorderTraversal(root));
+
+const inorderTraversal = function(root){
+  const res = []
+
+  const stack = []
+
+  let cur = root
+
+  while(cur || stack.length){
+    while(cur){
+      stack.push(cur)
+      cur = cur.left
+    }
+
+    cur = stack.pop()
+    res.push(cur.val)
+    cur = cur.right
+  }
+  return res
+}
+
+// console.log(inorderTraversal(root));
+
+const levelOrder = function(root){
+  const res = []
+  const queue = []
+  queue.push(root)
+
+  while(queue.length){
+    const level = []
+    const len = queue.length
+
+    for(let i = 0; i < len ;i++){
+      const top = queue.shift()
+      level.push(top.val)
+      if(top.left){
+        queue.push(top.left)
+      }
+      if(top.right){
+        queue.push(top.right)
+      }
+    }
+
+    res.push(level)
+  }
+  return res
+}
+
+// console.log(levelOrder(root));
+
+const invertTree = function(root){
+  if(!root){
+    return root
+  }
+
+  let right = invertTree(root.right)
+  let left = invertTree(root.left)
+  root.left = right
+  root.right = left
+  return root
+}
+
+console.log(invertTree(root));
