@@ -41,7 +41,7 @@ Bank.prototype.deposit = function(account, money) {
  * @return {boolean}
  */
 Bank.prototype.withdraw = function(account, money) {
-  if(this.balance[account-1]>money && account<=this.balance.length){
+  if(this.balance[account-1]>=money && account<=this.balance.length){
     this.balance[account-1] -= money
     return true
   }else{
