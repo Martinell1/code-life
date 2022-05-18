@@ -9,16 +9,16 @@
  * @param {TreeNode} root
  * @return {number[]}
  */
- var levelOrder = function(root) {
+var levelOrder = function(root) {
+    let queue = [root]
     const result = []
-    const dfs = (node)=>{
-        if(node!=null){
-            result.push(node.val)
+    while(queue.length>0){
+        let current = queue.shift()
+        if(current!=null){
+            result.push(current.val);
+            queue.push(current.left);
+            queue.push(current.right);
         }
-        dfs(node.left)
-        dfs(node.right)
     }
-    console.log(result)
-    dfs(root);
     return result
 };
