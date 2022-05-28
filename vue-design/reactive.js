@@ -56,31 +56,120 @@ function cleanup(effectFn){
 //桶，存储副作用函数
 const bucket = new WeakMap()
 
-const data = {
-    foo:1,
-    bar:2
+const ITERATE_KEY = Symbol()
+
+const TriggerType = {
+    SET : 'SET',
+    ADD : 'ADD',
+    DELETE : 'DELETE'
 }
 
-//代理对象
-const obj = new Proxy(data,{
+const arrayInstrumentations = {}
+;['includes','indexOf','lastIndexOf'].forEach(method => {
+    
+    const originMethod = Array.prototype[method]
+    arrayInstrumentations[method] = function(...args){
+        let res = originMethod.apply(this,args)
 
-    //捕获get操作，执行track，追溯
-    get(target,key){
-        track(target,key)
-        return target[key]
-    },
-
-    //捕获set操作，执行trigger，触发
-    set(target,key,newVal){
-        target[key] = newVal
-        trigger(target,key)
+        if(res === false){
+            res = originMethod.apply(this.raw,args)
+        }
+    
+        return res
     }
 })
 
+let shouldTrack = true
+;['push','pop','shift','unshift','splice'].forEach(method => {
+    const originMethod = Array.prototype[method]
+    arrayInstrumentations[method] = function(...args){
+        shouldTrack = false
+        let res = originMethod.apply(this,args)
+        shouldTrack = true
+        return res
+    }
+})
+
+//代理对象
+function createReactive(obj, isShallow = false, isReadonly = false){
+    return new Proxy(obj,{
+
+        //捕获get操作，执行track，追溯
+        get(target,key,receiver){
+            if(key === 'raw'){
+                return target
+            }
+            if(Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)){
+                return Reflect.get(arrayInstrumentations,key,receiver)
+            }
+
+            if(!isReadonly && typeof key !== 'symbol'){
+                track(target,key)
+            }
+            const res = Reflect.get(target,key,receiver)
+           
+            if(isShallow){
+                return res
+            }
+            if(typeof res === 'object' && res !== null){
+                return isReadonly ? readonly(res) : reactive(res)
+            }
+            return res
+        },
+    
+        //捕获set操作，执行trigger，触发
+        set(target,key,newVal,receiver){
+
+            if(isReadonly){
+                console.warn(`属性${key}是只读的`)
+                return true
+            }
+            const oldVal = target[key]
+
+            const type = Array.isArray(target) 
+                            ? Number(key) < target.length ? TriggerType.SET : TriggerType.ADD
+                            : Object.prototype.hasOwnProperty.call(target,key) ? TriggerType.SET : TriggerType.ADD
+            const res = Reflect.set(target,key,newVal,receiver)
+            if(target === receiver.raw){
+                if(oldVal !== newVal && (oldVal === oldVal || newVal === newVal)){
+                    trigger(target,key,type,newVal)
+                }
+            }
+
+            return res
+        },
+    
+        has(target,key){
+            track(target,key)
+            return Reflect.has(target,key)
+        },
+    
+        ownKeys(target){
+            track(target,Array.isArray(target) ? 'length' : ITERATE_KEY)
+            return Reflect.ownKeys(target)
+        },
+    
+        deleteProperty(target,key){
+            if(isReadonly){
+                console.warn(`属性${key}是只读的`)
+                return true
+            }
+            const hadKey = Object.prototype.hasOwnProperty.call(target,key)
+            const res = Reflect.deleteProperty(target,key)
+    
+            if(res && hadKey){
+                trigger(target,key,TriggerType.DELETE)
+            }
+    
+            return res
+        }
+    })
+}
+
 function track(target,key){
     //无副作用函数
-    if(!activeEffect){
-        return target[key]
+    if(!activeEffect || !shouldTrack){
+        return
     }
     //从桶中取出当前对象的依赖映射
     let depsMap = bucket.get(target)
@@ -98,17 +187,40 @@ function track(target,key){
     activeEffect.deps.push(deps)
 }
 
-function trigger(target,key){
+function trigger(target,key,type,newVal){
     //从桶中取出当前对象的依赖映射
     const depsMap = bucket.get(target)
     //该对象未被追溯
     if(!depsMap){
         return
     }
+
     //从depsMap中取到当前key关联的所有副作用函数
     const effects = depsMap.get(key)
+
     //创建一个effectsToRun去依次执行副作用函数，防止无限循环
     const effectsToRun = new Set()
+
+    if(Array.isArray(target) && type === TriggerType.ADD){
+        const lengthEffects = depsMap.get('length')
+        lengthEffects && lengthEffects.forEach(effectFn=>{
+            //读取和设置操作在同一个副作用函数中时，会导致无限循环
+            //如何trigger要触发的函数和当前正在执行的副作用函数是同一个，则不执行
+            if(effectFn !== activeEffect){
+                effectsToRun.add(effectFn)
+            }
+        })
+    }
+    
+    if(Array.isArray(target) && key==='length'){
+        depsMap.forEach((effects,key)=>{
+            if(key >= newVal){
+                effects.forEach(effectFn=>{
+                    effectsToRun.add(effectFn)
+                })
+            }
+        })
+    }
     //effects.forEach中直接执行effectFn()，
     //会调用cleanup进行清除副作用函数，
     //但是副作用函数的执行会导致其重新收集到effects中
@@ -120,6 +232,17 @@ function trigger(target,key){
             effectsToRun.add(effectFn)
         }
     })
+
+    if(type === TriggerType.ADD || type === TriggerType.DELETE){
+        const iterateEffects = depsMap.get(ITERATE_KEY)
+        iterateEffects && iterateEffects.forEach(effectFn=>{
+            if(effectFn !== activeEffect){
+                effectsToRun.add(effectFn)
+            }
+        })
+    }
+
+
     effectsToRun.forEach(effectFn=>{
         if(effectFn.options.scheduler){
             //当前副作用函数有调度器，按调度器方式执行
@@ -129,6 +252,32 @@ function trigger(target,key){
         }
     })
 }
+
+const reactiveMap = new Map()
+
+function reactive(obj){
+    const existionProxy = reactiveMap.get(obj)
+    if(existionProxy){
+        return existionProxy
+    }
+
+    const proxy = createReactive(obj)
+    reactiveMap.set(obj,proxy)
+    return proxy
+}
+
+function shallowReactive(obj){
+    return createReactive(obj,true)
+}
+
+function readonly(obj){
+    return createReactive(obj,false,true)
+}
+
+function shallowReadonly(obj){
+    return createReactive(obj,true,true)
+}
+
 
 //任务队列
 const jobQueue = new Set()
@@ -263,10 +412,11 @@ function traverse(value,seen = new Set()){
     return value
 }
 
-watch(obj,(newValue,oldValue)=>{
-    console.log('数据变化了',newValue,oldValue);
-},{
-    immediate:true
+const arr = reactive([])
+effect(()=>{
+    arr.push(1)
+})
+effect(()=>{
+    arr.push(1)
 })
 
-obj.foo++
