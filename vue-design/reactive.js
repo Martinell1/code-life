@@ -90,6 +90,127 @@ let shouldTrack = true
     }
 })
 
+const mutableInstrumentations = {
+    get(key){
+        const target = this.raw
+        const had = target.has(key)
+        track(target,key)
+        if(had){
+            const res = target.get(key)
+            return typeof res === 'object' ? reactive(res) : res
+        }
+    },
+    set(key,value){
+        const target = this.raw
+        const had = target.has(key)
+        const oldValue = target.get(key)
+        const rawValue = value.raw || value
+        target.set(key,rawValue)
+        if(!had){
+            trigger(target,key,TriggerType.ADD)
+        }else if(oldValue !== value || (oldValue === oldValue && value ===value)){
+            trigger(target,key,TriggerType.SET)
+        }
+    },
+    add(key){
+        const target = this.raw
+        const hadKey = target.has(key)
+        const res = target.add(key)
+        if(!hadKey){
+            trigger(target,key,TriggerType.ADD)
+        }
+        return res
+    },
+    delete(key){
+        const target = this.raw
+        const hadKey = target.has(key)
+        const res = target.delete(key)
+        if(hadKey){
+            trigger(target,key,TriggerType.DELETE)
+        }
+        return res
+    },
+    forEach(callback,thisArg){
+        const wrap = (val) => typeof val === 'object' ? reactive(val) : val
+        const target = this.raw
+        track(target,ITERATE_KEY)
+        target.forEach((v,k)=>{
+            callback.call(thisArg,wrap(v),wrap(k),this)
+        })
+    },
+    [Symbol.iterator]:iterationMethod,
+    entries:iterationMethod,
+    values:valuesIterationMethod,
+    keys:KeysIterationMethod,
+}
+
+function iterationMethod(){
+    const target = this.raw
+    const itr = target[Symbol.iterator]()
+
+    const wrap = (val) => typeof val === 'object' && val !== null ? reactive(val) : val
+
+    track(target,ITERATE_KEY)
+
+    return{
+        next(){
+            const {value,done} = itr.next()
+            return {
+                value : value ? [wrap(value[0]),wrap(value[1])] : value,
+                done
+            }
+        },
+        [Symbol.iterator](){
+            return this
+        }
+    }
+}
+
+function valuesIterationMethod(){
+    const target = this.raw
+    const itr = target.values()
+
+    const wrap = (val)=> typeof val === 'object' ? reactive(val) : val
+
+    track(target,ITERATE_KEY)
+
+    return {
+        next(){
+            const {value,done} = itr.next()
+            return {
+                value : wrap(value),
+                done
+            }
+        },
+        [Symbol.iterator](){
+            return this
+        } 
+    }
+}
+
+const MAP_KEY_ITERATE_KEY = Symbol()
+function KeysIterationMethod(){
+    const target = this.raw
+    const itr = target.keys()
+
+    const wrap = (val)=> typeof val === 'object' ? reactive(val) : val
+
+    track(target,MAP_KEY_ITERATE_KEY)
+
+    return {
+        next(){
+            const {value,done} = itr.next()
+            return {
+                value : wrap(value),
+                done
+            }
+        },
+        [Symbol.iterator](){
+            return this
+        } 
+    }
+}
+
 //代理对象
 function createReactive(obj, isShallow = false, isReadonly = false){
     return new Proxy(obj,{
@@ -99,6 +220,11 @@ function createReactive(obj, isShallow = false, isReadonly = false){
             if(key === 'raw'){
                 return target
             }
+            if(key === 'size'){
+                track(target,ITERATE_KEY)
+                return Reflect.get(target,key,target)
+            }
+            return mutableInstrumentations[key]
             if(Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)){
                 return Reflect.get(arrayInstrumentations,key,receiver)
             }
@@ -233,8 +359,27 @@ function trigger(target,key,type,newVal){
         }
     })
 
-    if(type === TriggerType.ADD || type === TriggerType.DELETE){
+    if(
+        type === TriggerType.ADD || 
+        type === TriggerType.DELETE ||
+        (
+            type === TriggerType.SET &&
+            Object.prototype.toString.call(target) === '[object Map]'
+        )
+    ){
         const iterateEffects = depsMap.get(ITERATE_KEY)
+        iterateEffects && iterateEffects.forEach(effectFn=>{
+            if(effectFn !== activeEffect){
+                effectsToRun.add(effectFn)
+            }
+        })
+    }
+
+    if(
+        (type === TriggerType.ADD || type === TriggerType.DELETE) &&
+        Object.prototype.toString.call(target) === '[object MaP]'
+    ){
+        const iterateEffects = depsMap.get(MAP_KEY_ITERATE_KEY)
         iterateEffects && iterateEffects.forEach(effectFn=>{
             if(effectFn !== activeEffect){
                 effectsToRun.add(effectFn)
@@ -412,11 +557,14 @@ function traverse(value,seen = new Set()){
     return value
 }
 
-const arr = reactive([])
-effect(()=>{
-    arr.push(1)
-})
-effect(()=>{
-    arr.push(1)
-})
+const data = reactive(new Map([
+    ['key1','value2'],
+    ['key2','value2']
+]))
 
+effect(()=>{
+    for(const key of data.keys()){
+        console.log(key);
+    }
+})
+data.set('key2','value3')
