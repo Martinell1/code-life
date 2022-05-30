@@ -220,27 +220,39 @@ function createReactive(obj, isShallow = false, isReadonly = false){
             if(key === 'raw'){
                 return target
             }
-            if(key === 'size'){
-                track(target,ITERATE_KEY)
-                return Reflect.get(target,key,target)
-            }
-            return mutableInstrumentations[key]
-            if(Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)){
-                return Reflect.get(arrayInstrumentations,key,receiver)
+            const targetType = Object.prototype.toString.call(target).slice(8,-1);
+            switch (targetType) {
+                case 'Object':
+                case 'Array':
+                    if(Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)){
+                        return Reflect.get(arrayInstrumentations,key,receiver)
+                    }
+        
+                    if(!isReadonly && typeof key !== 'symbol'){
+                        track(target,key)
+                    }
+                    const res = Reflect.get(target,key,receiver)
+                   
+                    if(isShallow){
+                        return res
+                    }
+                    if(typeof res === 'object' && res !== null){
+                        return isReadonly ? readonly(res) : reactive(res)
+                    }
+                    return res
+                case 'Map':
+                case 'Set':
+                case 'WeakMap':
+                case 'WeakSet':
+                    if(key === 'size'){
+                        track(target,ITERATE_KEY)
+                        return Reflect.get(target,key,target)
+                    }
+                    return mutableInstrumentations[key]
+                default:
+                    return 
             }
 
-            if(!isReadonly && typeof key !== 'symbol'){
-                track(target,key)
-            }
-            const res = Reflect.get(target,key,receiver)
-           
-            if(isShallow){
-                return res
-            }
-            if(typeof res === 'object' && res !== null){
-                return isReadonly ? readonly(res) : reactive(res)
-            }
-            return res
         },
     
         //捕获set操作，执行trigger，触发
@@ -377,7 +389,7 @@ function trigger(target,key,type,newVal){
 
     if(
         (type === TriggerType.ADD || type === TriggerType.DELETE) &&
-        Object.prototype.toString.call(target) === '[object MaP]'
+        Object.prototype.toString.call(target) === '[object Map]'
     ){
         const iterateEffects = depsMap.get(MAP_KEY_ITERATE_KEY)
         iterateEffects && iterateEffects.forEach(effectFn=>{
@@ -557,14 +569,67 @@ function traverse(value,seen = new Set()){
     return value
 }
 
-const data = reactive(new Map([
-    ['key1','value2'],
-    ['key2','value2']
-]))
+function toRef(obj,key){
+    const wrapper = {
+        get value(){
+            return obj[key]
+        },
 
-effect(()=>{
-    for(const key of data.keys()){
-        console.log(key);
+        set value(val){
+            obj[key] = val
+        }
     }
-})
-data.set('key2','value3')
+
+    Object.defineProperty(wrapper,'__v_isRef',{
+        value:true
+    })
+    
+    return wrapper
+}
+
+function toRefs(obj){
+    const ret = {}
+    for(const key in obj){
+        ret[key] = toRef(obj,key)
+    }
+
+    return ret
+}
+
+function ref(val){
+    const wrapper = {
+        value:val
+    }
+    Object.defineProperty(wrapper,'__v_isRef',{
+        value:true
+    })
+
+    return reactive(wrapper)
+}
+
+function proxyRefs(target){
+    return new Proxy(target,{
+        get(target,key,receiver){
+            const value = Reflect.get(target,key,receiver)
+            return value.__v_isRef ? value.value : value
+        },
+
+        set(target,key,newValue,receiver){
+            const value =  target[key]
+            if(value.__v_isRef){
+                value.value = newValue
+                return true
+            }
+            return Reflect.set(target,key,newValue,receiver)
+        }
+    })
+}
+
+const obj = reactive({ foo: 1, bar: 2 })
+const newObj = proxyRefs({ ...toRefs(obj) })
+
+console.log(newObj.foo)
+console.log(newObj.bar)
+
+newObj.foo = 100
+console.log(newObj.foo)
