@@ -64,6 +64,7 @@ const TriggerType = {
     DELETE : 'DELETE'
 }
 
+//劫持数组
 const arrayInstrumentations = {}
 ;['includes','indexOf','lastIndexOf'].forEach(method => {
     
@@ -90,6 +91,8 @@ let shouldTrack = true
     }
 })
 
+
+//劫持集合
 const mutableInstrumentations = {
     get(key){
         const target = this.raw
@@ -250,7 +253,7 @@ function createReactive(obj, isShallow = false, isReadonly = false){
                     }
                     return mutableInstrumentations[key]
                 default:
-                    return 
+                    return target
             }
 
         },
@@ -263,7 +266,7 @@ function createReactive(obj, isShallow = false, isReadonly = false){
                 return true
             }
             const oldVal = target[key]
-
+            //判断当前操作的类型
             const type = Array.isArray(target) 
                             ? Number(key) < target.length ? TriggerType.SET : TriggerType.ADD
                             : Object.prototype.hasOwnProperty.call(target,key) ? TriggerType.SET : TriggerType.ADD
