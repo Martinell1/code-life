@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <div id="app"></div>
+    <script src="https://unpkg.com/@vue/reactivity@3.0.5/dist/reactivity.global.js"></script>
+    <script>
+        function normalizeClass(classList){
+            const type = typeof classList
+            let res = ''
+            if(type === 'string'){
+                return classList
+            }else if(type === 'object'){
+                if(Array.isArray(classList)){
+                    for(const clz of classList){
+                        if(typeof clz === 'string'){
+                            if(res !== ''){
+                                res += ' '
+                            } 
+                        }
+                        res += normalizeClass(clz)
+                    }
+                }else{
+                    for(const key in classList){
+                        if(classList[key]){
+                            res += ' ' + key
+                        }
+                    }
+                }
+            }
+            console.log(res);
+            return res
+        }
+
+        function shouldSetAsProps(el,key,value){
+            if(key === 'form' && el.tagName === 'INPUT'){
+                return false
+            }else{
+                return key in el
+            }
+        }
+
+        function createRenderer(options){
+            const {
+                createElement,
+                insert,
+                setElementText,
+                patchProps
+            } = options
+
+            function mountElement(vnode,container){
+                const el = createElement(vnode.type)
+                if(typeof vnode.children === 'string'){
+                    setElementText(el,vnode.children)
+                }else if(Array.isArray(vnode.children)){
+                    vnode.children.forEach(child => {
+                        patch(null,child,el)
+                    })
+                }
+                if(vnode.props){
+                    for(const key in vnode.props){
+                        patchProps(el,key,null,vnode.props[key])
+                    }
+                }
+                insert(el,container)
+            }
+
+            function patch(n1,n2,container){
+                if(!n1){
+                    mountElement(n2,container)
+                }else{
+
+                }
+            }
+
+            function render(vnode,container) {
+                if(vnode){
+                    patch(container._node,vnode,container)
+                }else{
+                    if(container._node){
+                        container.innerHTML = ''
+                    }
+                }
+                container._vnode - vnode
+            }
+
+            return {
+                render
+            }
+        }
+
+        const vnode = {
+            type:'p',
+            props:{
+                class:normalizeClass([
+                    'foo nar',
+                    {'baz':true,'faz':false},
+                    'ddd',
+                    {'xxx':true}
+                ])
+            },
+            children:'123'
+        }
+
+        const renderer = createRenderer({
+            createElement(tag){
+                console.log(`创建了元素${tag}`);
+                return document.createElement(tag)
+            },
+            setElementText(el,text){
+                console.log(`${JSON.stringify(el)}设置了元素${text}`);
+                el.textContent = text
+            },
+            insert(el,parent,anchor = null){
+                console.log(`挂载了元素${JSON.stringify(el)}到${JSON.stringify(parent)}`);
+                parent.insertBefore(el,anchor)
+            },
+            patchProps(el,key,preValue,nextValue){
+                if(key === 'class'){
+                    el.className = nextValue || ''
+                }else if(shouldSetAsProps(el,key,nextValue)){
+                    const type = typeof el[key]
+                    if(type === 'boolean' && nextValue === ''){
+                        el[key] = true
+                    }else{
+                        el[key] = nextValue
+                    }
+                }else{
+                    el.setAttribute(key,nextValue)
+                }
+            }
+        })
+        renderer.render(vnode,document.querySelector('#app'))
+    </script>
+</body>
+</html>
