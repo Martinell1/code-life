@@ -20,7 +20,7 @@
                 if(arrI !== 0){
                     j = result[result.length - 1]
                     if(arr[j] < arrI){
-                        p[i] = jresult.push(i)
+                        p[i] = result.push(i)
                         continue
                     }
                     u = 0
@@ -205,11 +205,12 @@
                     }
                     let patched = 0
                     for(let i = oldStart; i <= oldEnd ; i++){
-                        const oldVNode = oldChildren[j]
+                        const oldVNode = oldChildren[i]
 
                         if(patched <= count){
                             const k = keyIndex[oldVNode.key]
                             if(typeof k !== 'undefined'){
+                                newVNode = newChildren[k]
                                 patch(oldVNode,newVNode,container)
                                 patched++
                                 source[k - newStart] = i
@@ -379,16 +380,20 @@
                 {type:'p',children:'1',key:1},
                 {type:'p',children:'2',key:2},
                 {type:'p',children:'3',key:3},
+                {type:'p',children:'4',key:4},
+                {type:'p',children:'5',key:5},
             ]
         }
 
         const newVNode = {
             type : 'div',
             children: [
-                {type:'p',children:'44',key:4},
-                {type:'p',children:'11',key:1},
-                {type:'p',children:'33',key:3},
-                {type:'p',children:'22',key:2},
+                {type:'p',children:'1',key:1},
+                {type:'p',children:'3',key:3},
+                {type:'p',children:'4',key:4},
+                {type:'p',children:'2',key:2},
+                {type:'p',children:'7',key:7},
+                {type:'p',children:'5',key:5},
             ]
         }
 
