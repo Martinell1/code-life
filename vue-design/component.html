@@ -10,7 +10,7 @@
     <div id="app"></div>
     <script src="https://unpkg.com/@vue/reactivity@3.0.5/dist/reactivity.global.js"></script>
     <script>
-        const {reactive ,effect}  = VueReactivity
+        const {ref,reactive ,effect, shallowReactive,shallowReadonly}  = VueReactivity
 
         //任务队列
         const queue = new Set()
@@ -291,16 +291,163 @@
                 }
             }
 
+            let currentInstance = null
+            function setCurrentInstance(instance){
+                currentInstance = instance
+            }
+
+            function onMounted(fn){
+                if(currentInstance){
+                    currentInstance.mounted.push(fn)
+                }else{
+                    console.error(`onMounted函数只能在Setup中调用`)
+                }
+            }
+
             function mountComponent(vnode,container,anchor){
                 const componentOptions = vnode.type
-                const {render , data} = componentOptions
-                const state = reactive(data())
+                let {render ,data ,setup , beforeCreate ,created ,beforeMount ,mounted ,beforeUpdate ,updated ,
+                    props:propsOption
+                } = componentOptions
+                beforeCreate && beforeCreate()
+                const state = data ? reactive(data()) : null
+                const [props,attrs] = resolveProps(propsOption,vnode.props)
+
+
+                function emit(event,...payload){
+                    const eventName = `on${event[0].toUpperCase()+event.slice(1)}`
+                    const handler = instance.props[eventName]
+                    if(handler){
+                        handler(...payload)
+                    }else{
+                        console.error('事件不存在')
+                    }
+                }
+
+                const slots = vnode.children || {}
+
+                const instance = {
+                    state,
+                    props:shallowReactive(props),
+                    isMounted:false,
+                    subTree:null,
+                    slots,
+                    mounted:[]
+                }
+
+                const setupContext = {attrs,emit,slots}
+
+                setCurrentInstance(instance)
+
+                const setupResult = setup(shallowReadonly(instance.props),setupContext)
+                setCurrentInstance(null)
+                let setupState = null
+
+                if(typeof setupResult === 'function'){
+                    if(render){
+                        console.error('setup函数返回渲染函数,render选项将被忽略')
+                    }else{
+                        render = setupResult
+                    }
+                }else{
+                    setupState = setupResult
+                }
+                vnode.component = instance
+
+                const renderContext = new Proxy(instance,{
+                    get(t,k,r){
+                        console.log(setupState);
+                        const {state, props} = t
+                        if(state && k in state){
+                            return state[k]
+                        }else if(k in props){
+                            return props[k]
+                        }else if(setupState && k in setupState){
+                            
+                            return setupState[k]
+                        }else{
+                            console.error('不存在')
+                        }
+                    },
+                    set(t,k,v,r){
+                        const {state, props} = t
+                        if(state && k in state){
+                            state[k] = v
+                        }else if(k in props){
+                            console.warn(`Attemping to mutate prop ${k}.Props are readonly`)
+                        }else if(setupState && k in setupState){
+                            setupState[k] = v
+                        }else{
+                            console.error('不存在')
+                        }
+                    }
+                })
+
+                created && created.call(renderContext)
                 effect(()=>{
-                    const subTree = render.call(state,state)
-                    patch(null,subTree,container,anchor)
+                    const subTree = render.call(renderContext,renderContext)
+                    if(!instance.isMounted){
+                        beforeMount &&  beforeMount.call(state)
+                        patch(null,subTree,container,anchor)
+                        instance.isMounted = true
+                        mounted && mounted.call(state)
+                        instance.mounted && instance.mounted.forEach(hook => hook.call(renderContext))
+                    }else{
+                        beforeUpdate && beforeUpdate.call(state)
+                        patch(instance.subTree,subTree,container,anchor)
+                        updated && updated.call(state)
+                    }
+                    instance.subTree = subTree
                 },{
                     scheduler:queueJob
                 })
+            }
+
+            function resolveProps(options,propsData){
+                const props = {}
+                const attrs = {}
+                for(const key in propsData){
+                    if(key in options || key.startsWith('on')){
+                        props[key] = propsData[key]
+                    }else{
+                        attrs[key] = propsData[key]
+                    }
+                }
+                return [props,attrs]
+            }
+
+            function patchComponent(n1,n2,anchor){
+                const instance = (n2.component = n1.component)
+                const {props} = instance
+                if(hasPropsChanged){
+                    const {nextProps} = resolveProps(n2,type.props,n2.props)
+                    for(const k in nextProps){
+                        props[k] = nextProps[k]
+                    }
+
+                    for(const k in props){
+                        if(!(k in nextProps)){
+                            delete props[k]
+                        }
+                    }
+                }
+            }
+
+            function hasPropsChanged(
+                prevProps,
+                nextProps
+            ){
+                const nextKeys = Object.keys(nextProps)
+                if(nextKeys.length !== Object.keys(prevProps).length){
+                    return true
+                }
+                for(let i = 0; i < nextKeys.length; i++){
+                    const key = nextKeys[i]
+                    if(nextProps[key] !== prevProps[key]){
+                        return true
+                    }
+                }
+                return false
             }
 
             function patch(n1,n2,container,anchor){
@@ -420,6 +567,9 @@
         
         const MyComponent = {
             name: 'MyComponent',
+            props:{
+                title:String
+            },
             data() {
                 return {
                     foo : 'hello world'
@@ -428,17 +578,40 @@
             render(){
                 return {
                     type: 'div',
-                    children:`value of foo is ${this.foo}`
+                    children:`value of foo is ${this.title}`
+                }
+            }
+        }
+
+        const Comp = {
+            props:{
+                foo:String
+            },
+            setup(props,{emit}){
+                const count = ref(1)
+                emit('change',1,2)
+                return {
+                    count
+                }
+            },
+            render(){
+                return{
+                    type:'div',
+                    children:`count is ${this.count._value}`
                 }
             }
         }
 
         const CompVNode = {
-            type : MyComponent
+            type:Comp,
+            props:{
+                onChange:()=>{
+                    console.log('123');
+                }
+            }
         }
 
         renderer.render(CompVNode,document.querySelector('#app'))
-
 
     </script>
 </body>
