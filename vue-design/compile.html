@@ -160,76 +160,242 @@
             }
         }
 
-        function traverseNode(ast,context){
+        function traverseNode(ast, context) {
             context.currentNode = ast
+
             const exitFns = []
             const transforms = context.nodeTransforms
-            for(let i = 0; i < transforms.length; i++){
-                const onExit = transforms[i](context.currentNode,context)
-                if(onExit){
-                    exitFns.push(onExit)
-                }
-                if(!context.currentNode){
-                    return
-                }
+            for (let i = 0; i < transforms.length; i++) {
+            const onExit = transforms[i](context.currentNode, context)
+            if (onExit) {
+                exitFns.push(onExit)
+            }
+            if (!context.currentNode) return
             }
 
             const children = context.currentNode.children
-            if(children){
-                for(let i = 0 ; i < children.length ; i++){
-                    context.parent = context.currentNode
-                    context.childIndex = i
-                    traverseNode(children[i],context)
-                }
+            if (children) {
+            for (let i = 0; i < children.length; i++) {
+                context.parent = context.currentNode
+                context.childIndex = i
+                traverseNode(children[i], context)
+            }
             }
 
             let i = exitFns.length
-            while(i--){
-                exitFns[i]()
+            while (i--) {
+            exitFns[i]()
             }
         }
 
-        function transform(ast){
+        function transform(ast) {
             const context = {
-                currentNode:null,
-                parent:null,
-                replaceNode(node){
-                    context.parent.children[context.childIndex] = node
-                    context.currentNode = node
-                },
-                removeNode(){
-                    if(context.parent){
-                        context.parent.children.splice(context.childIndex,1)
-                        context.currentNode = null
-                    }
-                },
-                nodeTransforms:[
-                    transformElement,
-                    transformText
-                ]
+            currentNode: null,
+            parent: null,
+            replaceNode(node) {
+                context.currentNode = node
+                context.parent.children[context.childIndex] = node
+            },
+            removeNode() {
+                if (context.parent) {
+                context.parent.children.splice(context.childIndex, 1)
+                context.currentNode = null
+                }
+            },
+            nodeTransforms: [
+                transformRoot,
+                transformElement,
+                transformText
+            ]
             }
-            traverseNode(ast,context)
-            console.log(dump(ast));
+            // 调用 traverseNode 完成转换
+            traverseNode(ast, context)
         }
 
-        function transformElement(node,context){
-            if(node.type === 'Element' && node.tag === 'p'){
-                node.tag = 'h1'
-            }
+        function transformRoot(node){
             return ()=>{
-                
+                if(node.type !== 'Root'){
+                    return
+                }
+                const vnodeJSAST = node.children[0].jsNode
+                console.log(node.children[0]);
+                node.jsNode = {
+                    type:'FunctionDecl',
+                    id:{type:'Identifier',name:'render'},
+                    params:[],
+                    body:[
+                        {
+                            type:'ReturnStatement',
+                            return: vnodeJSAST
+                        }
+                    ]
+                }
             }
         }
 
-        function transformText(node,context){
-            if(node.type === 'Text'){
-                context.removeNode()
+        function transformElement(node){
+            return ()=> {
+                if(node.type !== 'Element'){
+                    return
+                }
+                const callExp = createCallExpression('h', [
+                    createStringLiteral(node.tag)
+                ])
+                node.children.length === 1
+                    ? callExp.arguments.push(node.children[0].jsNode)
+                    : callExp.arguments.push(
+                    createArrayExpression(node.children.map(c => c.jsNode))
+                    )
+                console.log(callExp);
+                node.jsNode = callExp
             }
+        }
+
+        function transformText(node){
+            if(node.type !== 'Text'){
+                return
+            }
+            node.jsNode = createStringLiteral(node.content)
+        }
+
+        function createStringLiteral(value){
+            return {
+                type:'StringLiteral',
+                value
+            }
+        }
+
+        function createIdentifier(name){
+            return {
+                type:'Identifer',
+                name
+            }
+        }
+
+        function createArrayExpression(elements){
+            return {
+                type:'ArrayExpression',
+                elements
+            } 
+        }
+
+        function createCallExpression(callee,arguments){
+            return {
+                type:'CallExpression',
+                callee:createIdentifier(callee),
+                arguments
+            } 
+        }
+
+        function genNodeList(nodes,context){
+            const {push} = context
+            for(let i = 0; i < nodes.length; i++){
+                const node = nodes[i]
+                genNode(node,context)
+                if(i < nodes.length - 1){
+                    push(', ')
+                }
+            }
+        }
+
+        function genFunctionDecl(node,context){
+            const {push,indent,deIndent} = context
+            push(`function ${node.id.name}`)
+            push(`(`)
+            genNodeList(node.params,context)
+            push(`) `)
+            push(`{`)
+            indent()
+            node.body.forEach(n => genNode(n,context))
+            deIndent()
+            push(`}`)
+        }
+
+        function genArrayExpression(node,context){
+            const {push} = context
+            push(`[`)
+            genNodeList(node.elements,context)
+            push(`]`)
+        }
+
+        function genReturnStatement(node,context){
+            const {push} = context
+            push(`return `)
+            genNode(node.return,context)
+        }
+
+        function genStringLiteral(node,context){
+            const {push} = context
+            push(`'${node.value}'`)
+        }
+
+        function genCallExpression(node,context){
+            const {push} = context
+            const {callee,arguments:args} = node
+            push(`${callee.name}(`)
+            genNodeList(args,context)
+            push(`)`)
+        }
+
+        function genNode(node,context){
+            switch(node.type){
+                case 'FunctionDecl':
+                    genFunctionDecl(node,context)
+                    break
+                case 'ReturnStatement':
+                    genReturnStatement(node,context)
+                    break
+                case 'CallExpression':
+                    genCallExpression(node,context)
+                    break
+                case 'StringLiteral':
+                    genStringLiteral(node,context)
+                    break
+                case 'ArrayExpression':
+                    genArrayExpression(node,context)
+                    break
+            }
+        }
+
+        function generate(node){
+            const context = {
+                code:'',
+                push(code){
+                    context.code += code
+                },
+                currentIndent:0,
+                newline(){
+                    context.code += '\n' + `  `.repeat(context.currentIndent)
+                },
+                indent(){
+                    context.currentIndent++
+                    context.newline()
+                },
+                deIndent(){
+                    context.currentIndent--
+                    context.newline()
+                }
+            }
+
+            genNode(node,context)
+            return context.code
+        }
+
+        function compile(template){
+            const ast = parse(template)
+            
+            transform(ast)
+            console.log(ast);
+            const code = generate(ast.jsNode)
+            return code
         }
 
         const ast = parse(`<div><p>Vue</p><p>Template</p></div>`)
-
         transform(ast)
+
+        console.log(ast)
+
+        console.log(generate(ast.jsNode))
     </script>
 </body>
 </html>
