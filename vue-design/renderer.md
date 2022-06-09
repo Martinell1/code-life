@@ -224,7 +224,7 @@ function createRenderer(options){
 
 在`patchChildren`中，会将节点分为三种情况，无子节点，文本子节点，数组子节点，
 
-并依据新旧子节点的类型进行判断，最复杂的情况即是新旧都为数组子节点，
+并依据新旧子节点的类型进行判断，最复杂的情况即新旧都为数组子节点，
 
 在这种情况下，为了尽可能减少dom操作，我们需要设计一个算法使得旧节点能以最小的代价更新成新的节点，
 
@@ -346,46 +346,6 @@ const renderer = createRenderer({
 最后附上完整代码
 
 ```js
-function getSequence(arr){
-    const p = arr.slice()
-    const result = [0]
-    let i,j,u,v,charset
-    const len = arr.length
-    for(i = 0 ; i < len; i++){
-        const arrI = arr[i]
-        if(arrI !== 0){
-            j = result[result.length - 1]
-            if(arr[j] < arrI){
-                p[i] = result.push(i)
-                continue
-            }
-            u = 0
-            v = result.length - 1
-            while(u < v){
-                c = ((u+v)/2) | 0
-                if(arr[result[c]] < arrI){
-                    u = c + 1
-                }else{
-                    v = c
-                }
-            }
-            if(arrI < arr[result[u]]){
-                if(u > 0){
-                    p[i] = result[u - 1]
-                }
-                result[u] = i
-            }
-        }
-    }
-    u = result.length
-    v = result[u - 1]
-    while(u-- > 0){
-        result[u] = v
-        v = p[v]
-    }
-    return result
-}
-
 function normalizeClass(classList){
     const type = typeof classList
     let res = ''
