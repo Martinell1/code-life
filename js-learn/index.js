@@ -5,7 +5,6 @@ obj.fn = (function (num) {
 	this.num = num * 3 //60 this为global
 	num++ //21
 	return function (n) {
-		console.log(this)
 		this.num += n
 		num++
 		console.log(num)
@@ -15,7 +14,8 @@ obj.fn = (function (num) {
 var fn = obj.fn
 
 fn(5) //22  this为global
-
+console.log(global)
 obj.fn(10) //23
 
 console.log(num, obj.num) //10 30
+console.log(global.num)

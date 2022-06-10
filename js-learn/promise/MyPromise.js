@@ -172,25 +172,6 @@ function resolvePromise(promise, x, resolve, reject) {
 				// 否则以 e 为据因拒绝 promise
 				reject(error)
 			}
-			try {
-				then.call(
-					x,
-					(y) => {
-						if (called) return
-						called = true
-						resolve(y)
-						resolvePromise(promise, y, resolve, reject)
-					},
-					(r) => {
-						if (called) return
-						called = true
-						reject(r)
-					}
-				)
-			} catch (e) {
-				if (called) return
-				reject(e)
-			}
 		} else {
 			resolve(x)
 		}
