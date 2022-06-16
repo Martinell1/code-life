@@ -1,5 +1,6 @@
 const mergeTwoLists = (l1, l2) => {
   // 定义一个虚拟节点，最后返回虚拟节点的下一个节点
+  // eslint-disable-next-line no-undef
   const res = new ListNode(0)
   // 定义p指向虚拟节点
   let p = res
