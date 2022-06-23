@@ -10,24 +10,23 @@
  * @param {TreeNode} root
  * @return {number}
  */
- var findBottomLeftValue = function(root) {
+const findBottomLeftValue = function (root) {
   let curVal = -9999999
   let curLevel = 0
-  const dfs = (root,level)=>{
-      if(!root){
-          return
-      }
-      let newLevel = ++level;
-      dfs(root.left,newLevel)
-      dfs(root.right,newLevel)
-      if(newLevel > curLevel){
-          
-          curVal = root.val
-          curLevel = newLevel
-      }
+  const dfs = (root, level) => {
+    if (!root) {
+      return
+    }
+    const newLevel = ++level
+    dfs(root.left, newLevel)
+    dfs(root.right, newLevel)
+    if (newLevel > curLevel) {
+      curVal = root.val
+      curLevel = newLevel
+    }
   }
 
-  dfs(root,0)
+  dfs(root, 0)
 
   return curVal
-};
+}
