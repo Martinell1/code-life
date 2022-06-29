@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    html,body{
+      padding: 0;
+      margin: 0;
+      height: 100%;
+      width: 100%;
+    }
+    #canvas{
+      height: 100%;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script src="../js/three.js"></script>
+  <script>
+    const init = ()=>{
+      const meshArr = []
+      const canvas = document.querySelector('#canvas')
+
+      const scene = new THREE.Scene()
+      scene.background = new THREE.Color(0xAAAAAA)
+
+      const camera = new THREE.PerspectiveCamera(40,2,0.1,1000)
+      camera.aspect = canvas.clientWidth / canvas.clientHeight
+      camera.updateProjectionMatrix()
+      camera.position.z = 100
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas
+      })
+      renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
+
+      const light0 = new THREE.DirectionalLight(0xFFFFFF,1)
+      light0.position.set(-1,2,4)
+      scene.add(light0)
+
+      const light1 = new THREE.DirectionalLight(0xFFFFFF,1)
+      light1.position.set(1,2,4)
+      scene.add(light1)
+
+      const solidPrimitivesArr = []
+      solidPrimitivesArr.push(myBox, myCircle, myCone, myCylinder, myDodecahedron)
+      solidPrimitivesArr.push(myExtrude, myIcosahedron, myOctahedron)
+
+      solidPrimitivesArr.forEach((item) => {
+          const material = createMaterial() //随机获得一种颜色材质
+          const mesh = new THREE.Mesh(item, material)
+          meshArr.push(mesh) //将网格添加到网格数组中
+      })
+
+      const eachRow = 5
+      const spread = 15
+
+      meshArr.forEach((mesh, index) => {
+        //我们设定的排列是每行显示 eachRow，即 5 个物体、行高 和 列宽 均为 spread 即 15
+        //因此每个物体根据顺序，计算出自己所在的位置
+        const row = Math.floor(index / eachRow) //计算出所在行
+        const column = index % eachRow //计算出所在列
+
+        mesh.position.x = (column - 2) * spread //为什么要 -2 ？
+        //因为我们希望将每一行物体摆放的单元格，依次是：-2、-1、0、1、2，这样可以使每一整行物体处于居中显示
+        mesh.position.y = (2 - row) * spread
+
+        scene.add(mesh) //将网格添加到场景中
+      })
+
+      const render = (time) => {
+          time = time * 0.001
+          meshArr.forEach(item => {
+              item.rotation.x = time
+              item.rotation.y = time
+          })
+
+          renderer.render(scene, camera)
+          window.requestAnimationFrame(render)
+      }
+      window.requestAnimationFrame(render)
+    }
+
+    const createMaterial = () => {
+      return new THREE.MeshPhongMaterial({ color: 0x44aa88 })
+    }
+
+    const myBox = new THREE.BoxBufferGeometry(8,8,8)
+
+    const myCircle = new THREE.CircleBufferGeometry(5,32)
+
+    const myCone = new THREE.ConeGeometry( 5, 20, 32 );
+
+    const myCylinder = new THREE.CylinderGeometry( 5, 5, 20, 32 );
+
+    const myDodecahedron = new THREE.DodecahedronGeometry(5,0)
+
+    const shape = new THREE.Shape();
+    shape.moveTo( 0,0 );
+    shape.lineTo( 0, 1 );
+    shape.lineTo( length, 1 );
+    shape.lineTo( length, 0 );
+    shape.lineTo( 0, 0 );
+    const myExtrude = new THREE.ExtrudeGeometry( shape, {
+      steps: 2,
+      depth: 16,
+      bevelEnabled: true,
+      bevelThickness: 1,
+      bevelSize: 1,
+      bevelOffset: 0,
+      bevelSegments: 1
+    })
+
+    const myIcosahedron = new THREE.IcosahedronGeometry(5,0)
+
+
+    const myOctahedron = new THREE.OctahedronGeometry(5,2)
+
+    
+    init()
+  </script>
+</body>
+</html>
