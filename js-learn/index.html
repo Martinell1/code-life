@@ -5,8 +5,32 @@
 		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Document</title>
+		<style>
+			*{
+				padding: 0;
+				margin: 0;
+			}
+			.container{
+				height: 200px;
+				background-color: aqua;
+				overflow: scroll;
+			}
+			.scroll{
+				height: 300px;
+				background-color: red;
+			}
+		</style>
 	</head>
 	<body>
-		<script src="./index.js"></script>
+		<div class="container">
+			<div class="scroll"></div>
+		</div>
+		<script>
+			const el = document.querySelector('.container')
+			el.addEventListener('scroll',(e)=>{
+				console.log(e.target.scrollTop);
+			})
+		</script>
+		<!-- <script src="./index.js"></script> -->
 	</body>
 </html>
